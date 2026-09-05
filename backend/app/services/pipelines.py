@@ -1,0 +1,211 @@
+"""The three automated jobs. Each is idempotent and safe to re-run manually from the UI."""
+import logging
+import re
+from datetime import datetime, timedelta
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models import (Alert, AlertKind, Application, ApplicationStatus, DiscoveredJob, Email,
+                      JobRunLog, Profile, StatusEvent)
+from . import email_classifier, gmail, matcher
+from .scraper.registry import active_sources
+
+log = logging.getLogger(__name__)
+
+ACTIVE = [ApplicationStatus.saved, ApplicationStatus.applied, ApplicationStatus.online_assessment,
+          ApplicationStatus.interviewing, ApplicationStatus.offer]
+
+
+def _run(db: Session, name: str, fn) -> JobRunLog:
+    run = JobRunLog(job=name)
+    db.add(run)
+    db.commit()
+    try:
+        run.summary = fn()
+        run.ok = True
+    except Exception as e:  # noqa: BLE001
+        log.exception("%s failed", name)
+        run.ok = False
+        run.summary = f"{type(e).__name__}: {e}"
+    run.finished_at = datetime.utcnow()
+    db.commit()
+    return run
+
+
+# ------------------------------------------------------------------ email scan
+KIND_FOR_CATEGORY = {
+    "online_assessment": AlertKind.assessment,
+    "interview_invite": AlertKind.interview,
+    "interview_followup": AlertKind.follow_up,
+    "offer": AlertKind.status_update,
+    "rejection": AlertKind.status_update,
+    "application_received": AlertKind.status_update,
+    "recruiter_outreach": AlertKind.new_company,
+    "other_job_related": AlertKind.follow_up,
+}
+
+# Cheap pre-filter so we don't send every newsletter to the LLM.
+JOB_HINTS = re.compile(
+    r"applicat|interview|assessment|hackerrank|codility|recruit|talent|position|role|offer|"
+    r"candidate|hiring|career|opportunit|next step|greenhouse|lever|workday|ashby|myworkday",
+    re.I,
+)
+
+
+def _domain(sender: str) -> str | None:
+    m = re.search(r"@([\w.-]+)", sender)
+    return m.group(1).lower() if m else None
+
+
+def _match_by_domain(db: Session, sender: str) -> Application | None:
+    d = _domain(sender)
+    if not d:
+        return None
+    for app in db.scalars(select(Application)):
+        for dom in app.company_domains or []:
+            if d.endswith(dom.lower()):
+                return app
+    return None
+
+
+def email_scan(db: Session) -> JobRunLog:
+    def work():
+        if not gmail.is_connected(db):
+            return "Gmail not connected — skipped"
+        tracked = list(db.scalars(select(Application).where(Application.status.in_(ACTIVE))))
+        messages = gmail.fetch_recent(db, since_days=2)
+        seen = 0
+        created = 0
+        for m in messages:
+            if db.scalar(select(Email).where(Email.gmail_id == m["gmail_id"])):
+                continue
+            seen += 1
+            text = f"{m['subject']} {m['snippet']} {m['sender']}"
+            if not JOB_HINTS.search(text) and not _match_by_domain(db, m["sender"]):
+                db.add(Email(gmail_id=m["gmail_id"], thread_id=m["thread_id"], sender=m["sender"],
+                             subject=m["subject"], snippet=m["snippet"], received_at=m["received_at"],
+                             classification={"category": "prefiltered_out"}))
+                continue
+
+            c = email_classifier.classify(m["sender"], m["subject"], m["body"], tracked)
+            app = None
+            if c.get("application_id"):
+                app = db.get(Application, int(c["application_id"]))
+            app = app or _match_by_domain(db, m["sender"])
+
+            email = Email(gmail_id=m["gmail_id"], thread_id=m["thread_id"], sender=m["sender"],
+                          subject=m["subject"], snippet=m["snippet"], received_at=m["received_at"],
+                          classification=c, application_id=app.id if app else None)
+            db.add(email)
+            db.flush()
+
+            cat = c.get("category", "not_job_related")
+            if cat == "not_job_related":
+                continue
+
+            # Learn the sender domain so future mail auto-links without an LLM call.
+            if app and (d := _domain(m["sender"])) and not any(d.endswith(x) for x in (app.company_domains or [])):
+                if not d.endswith(("gmail.com", "outlook.com", "yahoo.com")):
+                    app.company_domains = [*(app.company_domains or []), d]
+
+            kind = KIND_FOR_CATEGORY.get(cat, AlertKind.follow_up)
+            if cat == "recruiter_outreach" and app:
+                kind = AlertKind.follow_up
+            title = c.get("summary") or m["subject"] or "Job-related email"
+            company = app.company if app else (c.get("company") or _domain(m["sender"]) or "Unknown company")
+            db.add(Alert(
+                kind=kind,
+                title=f"{company}: {title}",
+                body=c.get("action") or m["snippet"],
+                application_id=app.id if app else None,
+                email_id=email.id,
+                suggested_status=c.get("suggested_status") if app and c.get("suggested_status") != app.status.value else None,
+                urgency=int(c.get("urgency") or 1),
+            ))
+            created += 1
+
+            # Deadlines mentioned in email become the app's next action if it has none.
+            if app and c.get("deadline") and not app.next_action_at:
+                try:
+                    app.next_action_at = datetime.fromisoformat(c["deadline"])
+                    app.next_action = c.get("action") or title
+                except ValueError:
+                    pass
+        db.commit()
+        return f"{len(messages)} fetched, {seen} new, {created} alerts"
+
+    return _run(db, "email_scan", work)
+
+
+# ------------------------------------------------------------------ job discovery
+def job_scan(db: Session) -> JobRunLog:
+    def work():
+        profile = db.get(Profile, 1)
+        if not profile or not (profile.target_roles or profile.llm_summary):
+            return "Profile incomplete — skipped"
+        applied = list(db.scalars(select(Application).order_by(Application.created_at.desc())))
+        queries = list(dict.fromkeys([*(profile.target_roles or []), *[a.role for a in applied[:5]]]))
+        locations = profile.target_locations or []
+
+        new_jobs: list[DiscoveredJob] = []
+        for source in active_sources():
+            try:
+                for raw in source.search(queries, locations):
+                    if db.scalar(select(DiscoveredJob).where(DiscoveredJob.external_id == raw.external_id)):
+                        continue
+                    # skip companies already applied to for the same role
+                    if any(a.company.lower() == raw.company.lower() and a.role.lower() == raw.role.lower() for a in applied):
+                        continue
+                    job = DiscoveredJob(external_id=raw.external_id, source=raw.source, company=raw.company,
+                                        role=raw.role, location=raw.location, url=raw.url,
+                                        description=raw.description, posted_at=raw.posted_at)
+                    db.add(job)
+                    new_jobs.append(job)
+            except Exception:  # noqa: BLE001
+                log.exception("source %s failed", source.name)
+        db.flush()
+
+        # Score in batches of 15 to keep prompts small.
+        for i in range(0, len(new_jobs), 15):
+            batch = new_jobs[i:i + 15]
+            for jid, s in matcher.score_batch(profile, applied, batch).items():
+                job = db.get(DiscoveredJob, jid)
+                if job:
+                    job.match_score, job.match_reason = s["score"], s["reason"]
+
+        strong = [j for j in new_jobs if (j.match_score or 0) >= 80]
+        for j in strong[:5]:
+            db.add(Alert(kind=AlertKind.discovery, title=f"Strong match: {j.role} at {j.company}",
+                         body=j.match_reason, urgency=2))
+        db.commit()
+        return f"{len(new_jobs)} new jobs from {len(active_sources())} sources, {len(strong)} strong matches"
+
+    return _run(db, "job_scan", work)
+
+
+# ------------------------------------------------------------------ deadlines
+def deadline_check(db: Session) -> JobRunLog:
+    def work():
+        soon = datetime.utcnow() + timedelta(days=2)
+        n = 0
+        for app in db.scalars(select(Application).where(Application.next_action_at <= soon,
+                                                         Application.status.in_(ACTIVE))):
+            exists = db.scalar(select(Alert).where(Alert.application_id == app.id, Alert.kind == AlertKind.deadline,
+                                                   Alert.dismissed.is_(False), Alert.created_at >= datetime.utcnow() - timedelta(days=1)))
+            if exists:
+                continue
+            db.add(Alert(kind=AlertKind.deadline, title=f"{app.company}: {app.next_action or 'action due'}",
+                         body=f"Due {app.next_action_at:%a %d %b}", application_id=app.id, urgency=3))
+            n += 1
+        # Flag ghosted: applied > 30 days, no movement.
+        stale = datetime.utcnow() - timedelta(days=30)
+        for app in db.scalars(select(Application).where(Application.status == ApplicationStatus.applied,
+                                                         Application.updated_at < stale)):
+            app.status = ApplicationStatus.ghosted
+            db.add(StatusEvent(application_id=app.id, from_status="applied", to_status="ghosted",
+                               reason="No response in 30 days", source="system"))
+        db.commit()
+        return f"{n} deadline alerts"
+
+    return _run(db, "deadline_check", work)
