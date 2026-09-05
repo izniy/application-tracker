@@ -67,6 +67,7 @@ class AlertKind(str, enum.Enum):
     new_company = "new_company"          # email from a company not being tracked
     deadline = "deadline"                # next_action_at approaching
     discovery = "discovery"              # strong new job match
+    system = "system"                    # Orbit needs the user's attention (e.g. reconnect Gmail)
 
 
 class Alert(Base):

@@ -1,18 +1,28 @@
 """Gmail OAuth + inbox reading. Tokens are stored in IntegrationState under key 'gmail_token'."""
 import base64
+import logging
+import time
 from datetime import datetime, timedelta
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import IntegrationState
 
+log = logging.getLogger(__name__)
+
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 TOKEN_KEY = "gmail_token"
+
+
+class GmailAuthError(RuntimeError):
+    """The stored token can no longer be refreshed; the user must reconnect."""
 
 
 def _client_config() -> dict:
@@ -48,6 +58,8 @@ def _save(db: Session, creds: Credentials) -> None:
         "client_id": creds.client_id,
         "client_secret": creds.client_secret,
         "scopes": list(creds.scopes or SCOPES),
+        # Without expiry, creds.expired is always False and the token is never refreshed proactively.
+        "expiry": creds.expiry.isoformat() if creds.expiry else None,
     }
     db.add(row)
     db.commit()
@@ -69,11 +81,38 @@ def _creds(db: Session) -> Credentials:
     row = db.get(IntegrationState, TOKEN_KEY)
     if not row or not row.value:
         raise RuntimeError("Gmail not connected")
-    creds = Credentials(**row.value)
+    stored = dict(row.value)
+    expiry = stored.pop("expiry", None)
+    creds = Credentials(**stored)
+    if expiry:
+        creds.expiry = datetime.fromisoformat(expiry)
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as e:
+            # Token revoked or expired for good — clear it so status shows disconnected.
+            disconnect(db)
+            raise GmailAuthError(f"Gmail token refresh failed: {e}") from e
         _save(db, creds)
     return creds
+
+
+def _execute(request, tries: int = 4):
+    """Run a Gmail API request, backing off on rate limits and transient server errors."""
+    for attempt in range(tries):
+        try:
+            return request.execute()
+        except HttpError as e:
+            status = e.resp.status
+            rate_limited = status == 429 or (status == 403 and "ateLimit" in str(e))
+            if (rate_limited or status in (500, 503)) and attempt < tries - 1:
+                delay = 2 ** attempt
+                log.warning("Gmail API %s — retrying in %ss", status, delay)
+                time.sleep(delay)
+                continue
+            if status in (401, 403) and not rate_limited:
+                raise GmailAuthError(f"Gmail API auth error: {status}") from e
+            raise
 
 
 def _decode_body(payload: dict) -> str:
@@ -98,10 +137,19 @@ def fetch_recent(db: Session, since_days: int = 2, max_results: int = 100) -> li
     service = build("gmail", "v1", credentials=_creds(db), cache_discovery=False)
     after = int((datetime.utcnow() - timedelta(days=since_days)).timestamp())
     query = f"after:{after} -category:promotions -category:social"
-    resp = service.users().messages().list(userId="me", q=query, maxResults=max_results).execute()
+    try:
+        return _fetch(db, service, query, max_results)
+    except RefreshError as e:
+        # The transport refreshes on 401 mid-request; if that refresh fails the token is dead too.
+        disconnect(db)
+        raise GmailAuthError(f"Gmail token refresh failed: {e}") from e
+
+
+def _fetch(db: Session, service, query: str, max_results: int) -> list[dict]:
+    resp = _execute(service.users().messages().list(userId="me", q=query, maxResults=max_results))
     out = []
     for ref in resp.get("messages", []):
-        msg = service.users().messages().get(userId="me", id=ref["id"], format="full").execute()
+        msg = _execute(service.users().messages().get(userId="me", id=ref["id"], format="full"))
         headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
         out.append({
             "gmail_id": msg["id"],

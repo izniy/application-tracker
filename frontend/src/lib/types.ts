@@ -41,7 +41,7 @@ export interface Application {
   created_at: string; updated_at: string; events: StatusEvent[];
 }
 
-export type AlertKind = "status_update" | "interview" | "assessment" | "follow_up" | "new_company" | "deadline" | "discovery";
+export type AlertKind = "status_update" | "interview" | "assessment" | "follow_up" | "new_company" | "deadline" | "discovery" | "system";
 
 export interface Alert {
   id: number; kind: AlertKind; title: string; body: string | null;

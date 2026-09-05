@@ -6,11 +6,11 @@ import { STATUS_LABEL, type Alert, type AlertKind } from "../lib/types";
 
 const KIND_LABEL: Record<AlertKind, string> = {
   interview: "Interview", assessment: "Assessment", status_update: "Update", follow_up: "Follow up",
-  new_company: "New company", deadline: "Deadline", discovery: "Match",
+  new_company: "New company", deadline: "Deadline", discovery: "Match", system: "Orbit",
 };
 const KIND_COLOR: Record<AlertKind, string> = {
   interview: "text-signal", assessment: "text-amber", status_update: "text-ink", follow_up: "text-ink",
-  new_company: "text-mint", deadline: "text-rose", discovery: "text-mint",
+  new_company: "text-mint", deadline: "text-rose", discovery: "text-mint", system: "text-rose",
 };
 
 export default function Signals() {
