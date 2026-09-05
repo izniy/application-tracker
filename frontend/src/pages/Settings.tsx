@@ -19,6 +19,7 @@ export default function Settings() {
       <section className="panel p-5">
         <h2 className="font-medium mb-1">Gmail</h2>
         {params.get("email") === "connected" && <p className="text-sm text-mint mb-2">Connected.</p>}
+        {params.get("email") === "error" && <p className="text-sm text-rose mb-2">Connection didn't complete — Google denied or cancelled the request. Try again.</p>}
         {email?.connected ? (
           <>
             <p className="text-sm text-dim mb-3">Read-only access. Orbit checks the last two days of mail each morning, sends only job-related messages to the model, and never sends email.</p>

@@ -6,8 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import (Alert, AlertKind, Application, ApplicationStatus, DiscoveredJob, Email,
-                      JobRunLog, Profile, StatusEvent)
+from ..models import Alert, AlertKind, Application, ApplicationStatus, DiscoveredJob, Email, JobRunLog, Profile, StatusEvent
 from . import email_classifier, gmail, matcher
 from .scraper.registry import active_sources
 
@@ -69,12 +68,27 @@ def _match_by_domain(db: Session, sender: str) -> Application | None:
     return None
 
 
+def _gmail_reconnect_alert(db: Session) -> None:
+    """One undismissed reconnect alert at a time; scans keep failing until the user acts."""
+    exists = db.scalar(select(Alert).where(Alert.kind == AlertKind.system, Alert.dismissed.is_(False),
+                                           Alert.title.contains("Gmail")))
+    if not exists:
+        db.add(Alert(kind=AlertKind.system, title="Gmail connection expired — reconnect in Settings",
+                     body="Google stopped accepting Orbit's token, so inbox scans are paused. "
+                          "Open Settings and connect Gmail again.", urgency=3))
+    db.commit()
+
+
 def email_scan(db: Session) -> JobRunLog:
     def work():
         if not gmail.is_connected(db):
             return "Gmail not connected — skipped"
         tracked = list(db.scalars(select(Application).where(Application.status.in_(ACTIVE))))
-        messages = gmail.fetch_recent(db, since_days=2)
+        try:
+            messages = gmail.fetch_recent(db, since_days=2)
+        except gmail.GmailAuthError:
+            _gmail_reconnect_alert(db)
+            raise
         seen = 0
         created = 0
         for m in messages:

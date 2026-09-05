@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -5,6 +7,8 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..services import gmail
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/email", tags=["email"])
 
@@ -20,8 +24,15 @@ def oauth_start():
 
 
 @router.get("/oauth/callback")
-def oauth_callback(code: str, db: Session = Depends(get_db)):
-    gmail.exchange_code(db, code)
+def oauth_callback(code: str | None = None, error: str | None = None, db: Session = Depends(get_db)):
+    if error or not code:
+        # User denied consent or Google reported an error — land back in Settings, not on a traceback.
+        return RedirectResponse(f"{settings.frontend_origin}/settings?email=error")
+    try:
+        gmail.exchange_code(db, code)
+    except Exception:
+        log.exception("Gmail OAuth code exchange failed")
+        return RedirectResponse(f"{settings.frontend_origin}/settings?email=error")
     return RedirectResponse(f"{settings.frontend_origin}/settings?email=connected")
 
 
