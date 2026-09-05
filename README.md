@@ -20,6 +20,27 @@ npm install
 npm run dev                                           # http://localhost:5173 (proxies /api to :8000)
 ```
 
+## Gmail connection
+
+Create an OAuth client in Google Cloud Console (type **Web application**, redirect URI
+`http://localhost:8000/api/email/oauth/callback`, scope `gmail.readonly`, and add yourself as a
+test user while the consent screen is in testing). Put `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` in `backend/.env`, restart the backend, then click **Connect Gmail** in
+Settings. If Google ever revokes the token, Orbit clears it and raises a signal asking to reconnect.
+
+## Tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest                    # classifier eval needs ANTHROPIC_API_KEY; skipped otherwise
+ruff check app/ seed.py
+```
+
+The classifier tests in `tests/test_classifier.py` run fixture emails (ATS confirmations, OA
+invites, recruiter mail, digests) through the live model. The hard rule: newsletter/digest/receipt
+fixtures must never classify as job mail — false alerts are worse than missed ones.
+
 ## What is wired up
 
 | Piece | Where | Status |

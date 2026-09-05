@@ -1,0 +1,193 @@
+{
+  "_comment": "Classifier fixtures modeled on real job-search email formats (ATS confirmations, OA invites, recruiter mail, digests). All names, links and ids are synthetic. 'category' lists every acceptable answer; 'application_id' is the tracked-app id the email must (or must not) link to.",
+  "tracked": [
+    {"id": 1, "company": "Stripe", "role": "Software Engineer Intern", "status": "interviewing"},
+    {"id": 2, "company": "Grab", "role": "Data Platform Intern", "status": "online_assessment"},
+    {"id": 3, "company": "Shopee", "role": "Backend Engineer Intern", "status": "applied"},
+    {"id": 4, "company": "Anthropic", "role": "Software Engineer, Infrastructure (Intern)", "status": "applied"}
+  ],
+  "emails": [
+    {
+      "id": "greenhouse_confirmation",
+      "sender": "Stripe <no-reply@us.greenhouse-mail.io>",
+      "subject": "Thank you for applying to Stripe",
+      "body": "Hi Jordan,\n\nThank you for your interest in the Software Engineer Intern position at Stripe. We have received your application and our recruiting team is reviewing it. We will reach out if there is a fit.\n\nBest,\nThe Stripe Recruiting Team\n\nThis email was sent by Greenhouse on behalf of Stripe.",
+      "expect": {"category": ["application_received"], "application_id": 1}
+    },
+    {
+      "id": "lever_confirmation",
+      "sender": "Shopee <no-reply@hire.lever.co>",
+      "subject": "We've received your application!",
+      "body": "Hi Jordan,\n\nThanks for applying to Shopee! Your application for the Backend Engineer Intern role has been received. Our team reviews every application and will contact you if your background matches.\n\nShopee Talent Acquisition",
+      "expect": {"category": ["application_received"], "application_id": 3}
+    },
+    {
+      "id": "workday_confirmation",
+      "sender": "Grab Careers <grab@myworkday.com>",
+      "subject": "Grab Application Confirmation - R-2026-18234",
+      "body": "Dear Jordan,\n\nThank you for your application to the position of Data Platform Intern (R-2026-18234). Your application is under review. You can check your status anytime at grab.wd3.myworkdayjobs.com.\n\nPlease do not reply to this system-generated email.",
+      "expect": {"category": ["application_received"], "application_id": 2}
+    },
+    {
+      "id": "ashby_confirmation",
+      "sender": "Anthropic Recruiting <no-reply@ashbyhq.com>",
+      "subject": "Your application to Anthropic",
+      "body": "Hi Jordan,\n\nThank you for applying to the Software Engineer, Infrastructure (Intern) role at Anthropic. We've received your application and will be in touch about next steps.\n\nAnthropic Recruiting",
+      "expect": {"category": ["application_received"], "application_id": 4}
+    },
+    {
+      "id": "hackerrank_oa",
+      "sender": "Grab Talent <noreply@hackerrank.com>",
+      "subject": "Grab Data Platform Intern - Online Assessment Invitation",
+      "body": "Hi Jordan,\n\nCongratulations! You have been invited to complete the online coding assessment for the Data Platform Intern role at Grab.\n\nTest duration: 90 minutes\nDeadline: complete by 11 September 2026, 23:59 SGT\n\nStart your test: https://hackerrank.example/test/abc123\n\nGood luck!\nGrab Talent Team",
+      "expect": {"category": ["online_assessment"], "application_id": 2, "urgency": [2, 3], "deadline_contains": "2026-09-11"}
+    },
+    {
+      "id": "codility_oa_reminder",
+      "sender": "Codility <noreply@codility.com>",
+      "subject": "Reminder: your CodeCheck for Shopee expires in 48 hours",
+      "body": "Hello Jordan,\n\nThis is a reminder that your Codility CodeCheck session for Backend Engineer Intern at Shopee expires on 7 September 2026 at 09:00 GMT+8. It takes about 70 minutes.\n\nStart session: https://app.codility.example/test/XY12AB\n\nCodility Team",
+      "expect": {"category": ["online_assessment"], "application_id": 3, "urgency": [2, 3]}
+    },
+    {
+      "id": "codesignal_oa",
+      "sender": "CodeSignal <go@codesignal.com>",
+      "subject": "You're invited: General Coding Assessment for Nimbus Labs",
+      "body": "Hi Jordan,\n\nNimbus Labs has invited you to take the General Coding Assessment as part of your application for Software Engineer, New Grad. Complete it within 7 days.\n\nBegin assessment: https://app.codesignal.example/invite/9f8e\n\nCodeSignal",
+      "expect": {"category": ["online_assessment"], "application_id": null}
+    },
+    {
+      "id": "interview_invite_recruiter",
+      "sender": "Mei Ling <meiling@stripe.com>",
+      "subject": "Stripe - scheduling your system design interview",
+      "body": "Hi Jordan,\n\nGreat news - the team would like to move you forward to the system design round for the Software Engineer Intern position. Could you share your availability for 45 minutes next week? We have slots Tuesday 10:00-12:00 or Thursday 14:00-17:00 SGT.\n\nLooking forward,\nMei Ling\nUniversity Recruiting, Stripe",
+      "expect": {"category": ["interview_invite"], "application_id": 1, "urgency": [2, 3]}
+    },
+    {
+      "id": "calendar_invite",
+      "sender": "Google Calendar <calendar-notification@google.com>",
+      "subject": "Invitation: Stripe <> Jordan - System Design Interview @ Thu 11 Sep 2026 10:00 - 10:45 (SGT)",
+      "body": "You have been invited to the following event.\n\nStripe <> Jordan - System Design Interview\nWhen: Thu 11 Sep 2026 10:00 - 10:45 Singapore Standard Time\nWhere: Google Meet: https://meet.example/abc-defg-hij\nOrganizer: meiling@stripe.com\n\nGoing? Yes - Maybe - No",
+      "expect": {"category": ["interview_invite"], "application_id": 1}
+    },
+    {
+      "id": "interview_followup_next_steps",
+      "sender": "Mei Ling <meiling@stripe.com>",
+      "subject": "Re: Stripe - your interview yesterday",
+      "body": "Hi Jordan,\n\nThanks for taking the time to speak with the team yesterday. Feedback is being collected and I expect to come back to you with next steps by Friday. No action needed from you in the meantime.\n\nBest,\nMei Ling",
+      "expect": {"category": ["interview_followup"], "application_id": 1, "urgency": [1]}
+    },
+    {
+      "id": "documents_requested",
+      "sender": "Grab Talent <talent@grab.com>",
+      "subject": "Grab - additional documents needed for your application",
+      "body": "Dear Jordan,\n\nTo continue processing your application for Data Platform Intern, please upload a copy of your latest transcript and your student pass to the candidate portal within 5 working days.\n\nThank you,\nGrab Talent Operations",
+      "expect": {"category": ["interview_followup", "other_job_related"], "application_id": 2, "urgency": [2, 3]}
+    },
+    {
+      "id": "offer_letter",
+      "sender": "Mei Ling <meiling@stripe.com>",
+      "subject": "Stripe - offer for Software Engineer Intern",
+      "body": "Hi Jordan,\n\nI'm delighted to share that we would like to extend you an offer for the Software Engineer Intern position at Stripe for the Feb-May 2027 term! The formal offer letter is attached; compensation and start-date details are inside.\n\nPlease let us know your decision by 19 September 2026.\n\nCongratulations!\nMei Ling",
+      "expect": {"category": ["offer"], "application_id": 1, "urgency": [2, 3]}
+    },
+    {
+      "id": "rejection_standard",
+      "sender": "Shopee Talent <noreply@shopee.com>",
+      "subject": "Update on your Shopee application",
+      "body": "Dear Jordan,\n\nThank you for your interest in the Backend Engineer Intern position at Shopee and for the time you invested in the process. After careful consideration, we have decided not to move forward with your application at this time.\n\nWe encourage you to apply for future openings that match your profile.\n\nShopee Talent Acquisition",
+      "expect": {"category": ["rejection"], "application_id": 3, "urgency": [1]}
+    },
+    {
+      "id": "rejection_soft",
+      "sender": "Nimbus Labs Recruiting <recruiting@nimbuslabs.io>",
+      "subject": "Your application to Nimbus Labs",
+      "body": "Hi Jordan,\n\nThanks so much for giving us the chance to learn about your background. While we were impressed, we've chosen to proceed with candidates whose experience more closely matches the role's needs right now. We'll keep your resume on file and reach out should a suitable position open up.\n\nWarm regards,\nNimbus Labs Recruiting",
+      "expect": {"category": ["rejection"], "application_id": null, "urgency": [1]}
+    },
+    {
+      "id": "linkedin_recruiter_inmail",
+      "sender": "Daniel Ong via LinkedIn <inmail-hit-reply@linkedin.com>",
+      "subject": "Daniel Ong sent you a message: Platform Engineering Intern @ Coinbase",
+      "body": "Hi Jordan,\n\nI came across your profile and was impressed by your data infrastructure projects. I'm hiring for a Platform Engineering Intern role at Coinbase (Singapore) for early 2027 and think you could be a strong fit. Would you be open to a quick chat this week?\n\nDaniel Ong\nTechnical Recruiter, Coinbase\n\n-----\nYou are receiving LinkedIn notification emails.\nReply directly to this email to respond.",
+      "expect": {"category": ["recruiter_outreach"], "application_id": null}
+    },
+    {
+      "id": "agency_recruiter",
+      "sender": "Sarah Chen <sarah.chen@talentbridge-asia.com>",
+      "subject": "Junior Data Engineer opening - 6 month contract, Singapore",
+      "body": "Hi Jordan,\n\nI'm a consultant with TalentBridge Asia. A client of ours (a global payments firm) is looking for a Junior Data Engineer on an initial 6-month contract, S$4.5-5.5k/month, hybrid in Singapore. Your GitHub suggests solid Spark and Python experience.\n\nIf you're open to hearing more, just reply and I'll share the full JD.\n\nBest regards,\nSarah Chen",
+      "expect": {"category": ["recruiter_outreach"], "application_id": null}
+    },
+    {
+      "id": "referral_thread",
+      "sender": "Wei Jie <weijie.dev@gmail.com>",
+      "subject": "Re: referral for Databricks",
+      "body": "Hey! Submitted the referral for you just now - you should get an email from their system in the next few days with a link to formally apply. I put you down for the Software Engineering Intern req. Good luck, and let me know how it goes!\n\nWJ",
+      "expect": {"category": ["other_job_related", "application_received"], "application_id": null}
+    },
+    {
+      "id": "linkedin_job_digest",
+      "sender": "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>",
+      "subject": "software engineer intern: 30+ new jobs in Singapore",
+      "body": "Jobs you may be interested in\n\nSoftware Engineer Intern - Visa - Singapore\nBackend Engineer Intern - PayPal - Singapore\nData Engineer Intern - Agoda - Singapore\nMachine Learning Intern - TikTok - Singapore\n...and 26 more\n\nSee all jobs: https://www.linkedin.example/jobs/search\n\nYou are receiving Job Alert emails. Unsubscribe.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "indeed_digest",
+      "sender": "Indeed <alert@indeed.com>",
+      "subject": "10 new Data Platform Intern jobs in Singapore",
+      "body": "New jobs matching your search 'data platform intern'\n\nData Platform Intern - GIC - Singapore - apply easily\nIntern, Data Engineering - Singtel - Singapore\nCloud Data Intern - Accenture - Singapore\n\nView all 10 jobs\n\nYou received this because you subscribed to Indeed Job Alerts. Unsubscribe here.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "glassdoor_digest",
+      "sender": "Glassdoor <noreply@glassdoor.com>",
+      "subject": "Companies hiring interns now + salary insights for your search",
+      "body": "Trending this week\n\n15 companies actively hiring software engineering interns in Singapore\nWhat does a Software Engineer Intern earn? See salary reports\nInterview questions shared for Grab, Shopee and more\n\nExplore on Glassdoor. Unsubscribe from these emails.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "university_career_newsletter",
+      "sender": "NUS Centre for Future-ready Graduates <cfg@nus.edu.sg>",
+      "subject": "CFG Weekly: Tech Career Fair 2026, resume clinic slots open",
+      "body": "Dear students,\n\nHighlights this week:\n- Tech Career Fair 2026: 40+ employers, 18 September, UTown. Register by 12 Sep.\n- Resume clinic: 1-on-1 slots with industry mentors, Wednesdays.\n- New internship listings on TalentConnect.\n\nCentre for Future-ready Graduates",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "saas_marketing_hiring_words",
+      "sender": "Notion <team@makenotion.com>",
+      "subject": "New in Notion: AI meeting notes + we're hiring!",
+      "body": "Hi Jordan,\n\nThis month we shipped AI meeting notes, improved databases, and faster search. Read the full changelog.\n\nP.S. Our team is growing - we have open roles across engineering and design. Check out notion.example/careers if you know someone great for these positions!\n\nThe Notion Team. Unsubscribe.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "github_notification",
+      "sender": "GitHub <notifications@github.com>",
+      "subject": "[acme/data-pipeline] Review requested: Add retry logic to ingestion job (#482)",
+      "body": "@jordanlim requested your review on: acme/data-pipeline#482 Add retry logic to ingestion job.\n\nView it on GitHub: https://github.example/acme/data-pipeline/pull/482\n\nYou are receiving this because your review was requested.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "ecommerce_receipt",
+      "sender": "Shopee <order-update@notify.shopee.sg>",
+      "subject": "Your Shopee order 2609SG882 has shipped!",
+      "body": "Hi Jordan,\n\nGood news! Your order (USB-C hub, mechanical keyboard) has been shipped and is on the way. Track your parcel in the Shopee app.\n\nEstimated delivery: 8-10 September.\n\nThis is an automated message from Shopee.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "content_marketing_career_story",
+      "sender": "The Pragmatic Engineer <newsletter@pragmaticengineer.com>",
+      "subject": "How I got my first engineering job (and what I'd do differently)",
+      "body": "This week's issue is a guest post: a staff engineer looks back at breaking into tech - resumes, interview prep, negotiating offers, and the hiring market for new grads in 2026.\n\nRead online. You're receiving this because you subscribed. Unsubscribe.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    },
+    {
+      "id": "bootcamp_promo",
+      "sender": "CodeCamp SG <hello@codecamp.example>",
+      "subject": "Land your dream software job in 12 weeks - January cohort open",
+      "body": "Ready to level up your career? Our January cohort is now open.\n\n- 12-week intensive with hiring partners\n- Mock interviews with FAANG engineers\n- 89% of grads receive offers within 6 months\n\nEnrol by 30 September for the early-bird rate. Unsubscribe anytime.",
+      "expect": {"category": ["not_job_related"], "application_id": null}
+    }
+  ]
+}
