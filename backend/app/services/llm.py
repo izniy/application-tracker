@@ -22,19 +22,20 @@ def client() -> Anthropic:
     return _client
 
 
-def complete(system: str, user: str, max_tokens: int = 1024) -> str:
+def complete(system: str, user: str, max_tokens: int = 1024, temperature: float = 0.0) -> str:
     resp = client().messages.create(
         model=settings.anthropic_model,
         max_tokens=max_tokens,
+        temperature=temperature,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
     return "".join(block.text for block in resp.content if block.type == "text")
 
 
-def complete_json(system: str, user: str, max_tokens: int = 1024) -> dict:
+def complete_json(system: str, user: str, max_tokens: int = 1024, temperature: float = 0.0) -> dict:
     """Ask for JSON only; strip code fences; return {} on failure so callers degrade gracefully."""
-    text = complete(system + "\n\nRespond with a single JSON object and nothing else.", user, max_tokens)
+    text = complete(system + "\n\nRespond with a single JSON object and nothing else.", user, max_tokens, temperature)
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
     try:
         return json.loads(text)
