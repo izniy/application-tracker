@@ -1,7 +1,7 @@
 """Evaluate the email classifier against fixture emails with the real model.
 
-These tests call the live LLM, so they need ANTHROPIC_API_KEY (in the environment
-or backend/.env) and are skipped without it. They are an eval, not a unit test:
+These tests call the live LLM, so they need ANTHROPIC_API_KEY or GEMINI_API_KEY
+(in the environment or backend/.env) and are skipped without one. They are an eval, not a unit test:
 run them after changing the prompt in email_classifier.py.
 
 The bar, in order of importance:
@@ -14,9 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from app.config import settings
 from app.models import Application, ApplicationStatus
-from app.services import email_classifier
+from app.services import email_classifier, llm
 
 FIXTURES = json.loads((Path(__file__).parent / "fixtures" / "emails.json").read_text())
 
@@ -25,7 +24,7 @@ TRACKED = [
     for t in FIXTURES["tracked"]
 ]
 
-needs_llm = pytest.mark.skipif(not settings.anthropic_api_key, reason="ANTHROPIC_API_KEY not set")
+needs_llm = pytest.mark.skipif(not llm.is_configured(), reason="no LLM API key set")
 
 
 def _classify(email: dict) -> dict:

@@ -9,6 +9,7 @@ from .config import settings
 from .database import Base, engine
 from .routers import alerts, applications, email, jobs, profile, system
 from .scheduler import start as start_scheduler
+from .services import llm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -29,4 +30,4 @@ for r in (applications, alerts, jobs, profile, email, system):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "llm_configured": bool(settings.anthropic_api_key)}
+    return {"ok": True, "llm_configured": llm.is_configured()}
