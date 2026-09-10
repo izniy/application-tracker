@@ -25,8 +25,9 @@ def _run(db: Session, name: str, fn) -> JobRunLog:
         run.ok = True
     except Exception as e:  # noqa: BLE001
         log.exception("%s failed", name)
+        db.rollback()  # the failure may have poisoned the transaction; recover or the log write below dies too
         run.ok = False
-        run.summary = f"{type(e).__name__}: {e}"
+        run.summary = f"{type(e).__name__}: {e}"[:500]
     run.finished_at = datetime.utcnow()
     db.commit()
     return run
@@ -182,9 +183,13 @@ def job_scan(db: Session) -> JobRunLog:
         locations = profile.target_locations or []
 
         new_jobs: list[DiscoveredJob] = []
+        seen_ids: set[str] = set()  # sources return the same posting for several queries
         for source in active_sources():
             try:
                 for raw in source.search(queries, locations):
+                    if raw.external_id in seen_ids:
+                        continue
+                    seen_ids.add(raw.external_id)
                     if db.scalar(select(DiscoveredJob).where(DiscoveredJob.external_id == raw.external_id)):
                         continue
                     # skip companies already applied to for the same role
