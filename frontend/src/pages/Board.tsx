@@ -41,7 +41,7 @@ export default function Board() {
           return (
             <section
               key={status}
-              className="panel p-3 min-h-[60vh] flex flex-col"
+              className="panel p-3 min-h-[calc(100vh-14rem)] flex flex-col"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { const id = Number(e.dataTransfer.getData("id")); if (id) move(id, status); }}
             >
