@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ApplicationDrawer from "../components/ApplicationDrawer";
 import { api, fmtDate } from "../lib/api";
 import { STATUS_COLOR, STATUS_LABEL, type Application, type Status } from "../lib/types";
@@ -11,8 +12,18 @@ export default function Board() {
   const [selected, setSelected] = useState<Application | null>(null);
   const [open, setOpen] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [params, setParams] = useSearchParams();
   const load = () => api.applications().then(setApps);
   useEffect(() => { load(); }, []);
+
+  // ?app=<id> (e.g. from a signal) opens that application's drawer directly.
+  useEffect(() => {
+    const id = Number(params.get("app"));
+    if (!id || apps.length === 0) return;
+    const a = apps.find((x) => x.id === id);
+    if (a) { setSelected(a); setOpen(true); }
+    setParams({}, { replace: true });
+  }, [apps]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const move = async (id: number, status: Status) => {
     setApps((xs) => xs.map((a) => (a.id === id ? { ...a, status } : a)));
@@ -35,13 +46,13 @@ export default function Board() {
         </div>
       </header>
 
-      <div className="grid gap-3 overflow-x-auto pb-2" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(220px, 1fr))` }}>
+      <div className="grid gap-3 overflow-x-auto pb-2 snap-x snap-mandatory md:snap-none" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(220px, 1fr))` }}>
         {cols.map((status) => {
           const items = apps.filter((a) => a.status === status);
           return (
             <section
               key={status}
-              className="panel p-3 min-h-[calc(100vh-14rem)] flex flex-col"
+              className="panel p-3 min-h-[calc(100vh-14rem)] flex flex-col snap-start"
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { const id = Number(e.dataTransfer.getData("id")); if (id) move(id, status); }}
             >

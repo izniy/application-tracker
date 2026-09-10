@@ -57,7 +57,7 @@ function Group({ title, items, act }: { title: string; items: Alert[]; act: (fn:
               {a.body && <p className="text-sm text-dim mt-0.5">{a.body}</p>}
               <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-dim">
                 <span>{fmtRel(a.created_at)}</span>
-                {a.application_id && <Link to="/pipeline" className="text-signal">Open in pipeline</Link>}
+                {a.application_id && <Link to={`/pipeline?app=${a.application_id}`} className="text-signal">Open in pipeline</Link>}
                 {a.suggested_status && (
                   <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => act(() => api.applyAlertStatus(a.id))}>
                     <Check size={14} /> Move to {STATUS_LABEL[a.suggested_status]}
