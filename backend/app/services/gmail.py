@@ -144,6 +144,10 @@ def fetch_recent(db: Session, since_days: int = 2, max_results: int = 100) -> li
         # The transport refreshes on 401 mid-request; if that refresh fails the token is dead too.
         disconnect(db)
         raise GmailAuthError(f"Gmail token refresh failed: {e}") from e
+    except GmailAuthError:
+        # Hard 401/403 from the API: the token is unusable — clear it so Settings shows the truth.
+        disconnect(db)
+        raise
 
 
 def _fetch(db: Session, service, query: str, max_results: int) -> list[dict]:
