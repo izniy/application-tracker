@@ -58,6 +58,24 @@ def _domain(sender: str) -> str | None:
     return m.group(1).lower() if m else None
 
 
+# Domains that identify a mail platform or ATS, not the employer — learning one of these
+# for auto-linking would attach every company's mail on that platform to one application.
+SHARED_MAIL_DOMAINS = (
+    "gmail.com", "outlook.com", "yahoo.com", "googlemail.com",
+    "greenhouse-mail.io", "greenhouse.io", "lever.co", "myworkday.com", "myworkdayjobs.com",
+    "workday.com", "ashbyhq.com", "smartrecruiters.com", "icims.com", "jobvite.com",
+    "taleo.net", "oraclecloud.com", "successfactors.com", "bamboohr.com",
+    "hackerrank.com", "codility.com", "codesignal.com", "hirevue.com", "linkedin.com",
+)
+
+
+def _learnable_domain(sender: str) -> str | None:
+    d = _domain(sender)
+    if d and not any(d == s or d.endswith("." + s) for s in SHARED_MAIL_DOMAINS):
+        return d
+    return None
+
+
 def _match_by_domain(db: Session, sender: str) -> Application | None:
     d = _domain(sender)
     if not d:
@@ -132,9 +150,8 @@ def email_scan(db: Session) -> JobRunLog:
                 continue
 
             # Learn the sender domain so future mail auto-links without an LLM call.
-            if app and (d := _domain(m["sender"])) and not any(d.endswith(x) for x in (app.company_domains or [])):
-                if not d.endswith(("gmail.com", "outlook.com", "yahoo.com")):
-                    app.company_domains = [*(app.company_domains or []), d]
+            if app and (d := _learnable_domain(m["sender"])) and not any(d.endswith(x) for x in (app.company_domains or [])):
+                app.company_domains = [*(app.company_domains or []), d]
 
             # A newer message in a thread supersedes any alert an older one raised.
             if m["thread_id"]:
@@ -170,6 +187,32 @@ def email_scan(db: Session) -> JobRunLog:
         return f"{len(messages)} fetched, {seen} new, {created} alerts"
 
     return _run(db, "email_scan", work)
+
+
+def track_alert(db: Session, alert: Alert) -> Application:
+    """One click on an untracked signal: create the application the email implies,
+    link the alert and email to it, and learn the sender domain for auto-linking."""
+    email = db.get(Email, alert.email_id) if alert.email_id else None
+    c = (email.classification if email else None) or {}
+    company = c.get("company") or alert.title.split(":")[0].strip() or "Unknown company"
+    status = ApplicationStatus(email_classifier.STATUS_FOR_CATEGORY.get(c.get("category", ""), "applied"))
+    domain = _learnable_domain(email.sender) if email else None
+    app = Application(
+        company=company,
+        role=c.get("role") or "Role from email",
+        status=status,
+        applied_at=(email.received_at if email else None) or datetime.utcnow(),
+        company_domains=[domain] if domain else None,
+    )
+    db.add(app)
+    db.flush()
+    db.add(StatusEvent(application_id=app.id, to_status=status.value, reason=alert.title, source="email"))
+    alert.application_id = app.id
+    alert.read = True
+    if email:
+        email.application_id = app.id
+    db.commit()
+    return app
 
 
 # ------------------------------------------------------------------ job discovery

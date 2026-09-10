@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import Alert, Application, ApplicationStatus, DiscoveredJob, Email
+from app.models import Alert, AlertKind, Application, ApplicationStatus, DiscoveredJob, Email
 from app.services import pipelines
 from app.services.scraper.base import JobSource, RawJob
 
@@ -108,6 +108,68 @@ def test_job_scan_commits_jobs_even_when_scoring_fails(db, monkeypatch):
     db.refresh(job)
     assert job.match_score == 90.0
     assert db.scalar(select(Alert).where(Alert.kind == "discovery")) is not None
+
+
+def test_track_alert_creates_application_from_email(db):
+    email = Email(gmail_id="g1", thread_id="t", sender="Stripe <no-reply@stripe.com>", subject="s",
+                  classification={"category": "application_received", "company": "Stripe", "role": "SWE, New Grad"})
+    db.add(email)
+    db.flush()
+    alert = Alert(kind=AlertKind.status_update, title="Stripe: received", email_id=email.id)
+    db.add(alert)
+    db.commit()
+
+    app = pipelines.track_alert(db, alert)
+    assert app.company == "Stripe" and app.role == "SWE, New Grad"
+    assert app.status == ApplicationStatus.applied
+    assert app.company_domains == ["stripe.com"]  # learned for future auto-linking
+    assert alert.application_id == app.id and email.application_id == app.id
+    assert app.events[0].source == "email"
+
+
+def test_track_alert_never_learns_ats_domains(db):
+    email = Email(gmail_id="g2", thread_id="t2", sender="UOB <uob@myworkday.com>", subject="s",
+                  classification={"category": "application_received", "company": "UOB", "role": "Analyst"})
+    db.add(email)
+    db.flush()
+    alert = Alert(kind=AlertKind.status_update, title="UOB: received", email_id=email.id)
+    db.add(alert)
+    db.commit()
+
+    app = pipelines.track_alert(db, alert)
+    assert app.company == "UOB"
+    assert app.company_domains is None  # myworkday.com would match every Workday employer
+
+
+class _DupSource(JobSource):
+    name = "dup"
+
+    def search(self, queries, locations):
+        j = RawJob(external_id="dup:1", source="dup", company="Acme", role="SWE Intern", url="http://x")
+        return [j, j]  # same posting matched by two queries
+
+
+def test_job_scan_dedupes_within_one_fetch(db, monkeypatch):
+    from app.models import Profile
+    db.add(Profile(id=1, target_roles=["SWE Intern"], llm_summary="intern"))
+    db.commit()
+    monkeypatch.setattr(pipelines, "active_sources", lambda: [_DupSource()])
+    monkeypatch.setattr(pipelines.matcher, "score_batch",
+                        lambda profile, applied, jobs, verdicts=None: {j.id: {"score": 50.0, "reason": "ok"} for j in jobs})
+    run = pipelines.job_scan(db)
+    assert run.ok, run.summary
+    assert len(list(db.scalars(select(DiscoveredJob)))) == 1
+
+
+def test_run_logs_failure_even_when_transaction_is_poisoned(db):
+    def bad():
+        db.add(DiscoveredJob(external_id="x:1", source="x", company="A", role="R", url="u"))
+        db.add(DiscoveredJob(external_id="x:1", source="x", company="A", role="R", url="u"))
+        db.commit()  # IntegrityError leaves the session in a rolled-back-required state
+
+    run = pipelines._run(db, "job_scan", bad)
+    assert run.finished_at is not None and not run.ok  # never a zombie "running" row
+    assert "IntegrityError" in run.summary
 
 
 def test_email_scan_skips_when_disconnected(db, monkeypatch):

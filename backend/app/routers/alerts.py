@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Alert, Application, ApplicationStatus, StatusEvent
 from ..schemas import AlertOut
+from ..services import pipelines
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
@@ -52,6 +53,18 @@ def apply_suggested_status(alert_id: int, db: Session = Depends(get_db)):
     a.suggested_status = None
     a.read = True
     db.commit()
+    return a
+
+
+@router.post("/{alert_id}/track", response_model=AlertOut)
+def track(alert_id: int, db: Session = Depends(get_db)):
+    """One-click: put the application this signal is about onto the pipeline."""
+    a = db.get(Alert, alert_id)
+    if not a:
+        raise HTTPException(404)
+    if a.application_id:
+        raise HTTPException(400, "Already tracked")
+    pipelines.track_alert(db, a)
     return a
 
 

@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, fmtRel } from "../lib/api";
@@ -61,6 +61,11 @@ function Group({ title, items, act }: { title: string; items: Alert[]; act: (fn:
                 {a.suggested_status && (
                   <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => act(() => api.applyAlertStatus(a.id))}>
                     <Check size={14} /> Move to {STATUS_LABEL[a.suggested_status]}
+                  </button>
+                )}
+                {!a.application_id && ["status_update", "assessment", "interview", "follow_up", "new_company"].includes(a.kind) && (
+                  <button className="btn-ghost !py-1 !px-2 text-xs" onClick={() => act(() => api.trackAlert(a.id))}>
+                    <Plus size={14} /> Add to pipeline
                   </button>
                 )}
               </div>

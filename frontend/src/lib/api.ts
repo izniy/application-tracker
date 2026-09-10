@@ -22,6 +22,7 @@ export const api = {
   readAlert: (id: number) => req<Alert>(`/alerts/${id}/read`, { method: "POST" }),
   dismissAlert: (id: number) => req<Alert>(`/alerts/${id}/dismiss`, { method: "POST" }),
   applyAlertStatus: (id: number) => req<Alert>(`/alerts/${id}/apply-status`, { method: "POST" }),
+  trackAlert: (id: number) => req<Alert>(`/alerts/${id}/track`, { method: "POST" }),
   readAllAlerts: () => req("/alerts/read-all", { method: "POST" }),
 
   jobs: (minScore = 0) => req<DiscoveredJob[]>(`/jobs?min_score=${minScore}`),
