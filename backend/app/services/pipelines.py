@@ -64,7 +64,7 @@ SHARED_MAIL_DOMAINS = (
     "gmail.com", "outlook.com", "yahoo.com", "googlemail.com",
     "greenhouse-mail.io", "greenhouse.io", "lever.co", "myworkday.com", "myworkdayjobs.com",
     "workday.com", "ashbyhq.com", "smartrecruiters.com", "icims.com", "jobvite.com",
-    "taleo.net", "oraclecloud.com", "successfactors.com", "bamboohr.com",
+    "taleo.net", "oraclecloud.com", "oracle.com", "successfactors.com", "bamboohr.com",
     "hackerrank.com", "codility.com", "codesignal.com", "hirevue.com", "linkedin.com",
 )
 
@@ -246,6 +246,18 @@ def job_scan(db: Session) -> JobRunLog:
             except Exception:  # noqa: BLE001
                 log.exception("source %s failed", source.name)
         db.commit()  # persist finds before scoring — a failed scoring pass loses nothing
+
+        # Cheap before expensive: an early-career candidate never needs the LLM to
+        # reject a Senior/Staff/Lead title.
+        levels = [x.lower() for x in (profile.target_levels or [profile.seniority or ""]) if x]
+        early_career = levels and all(x in ("internship", "intern", "new grad", "new_grad", "junior") for x in levels)
+        senior_title = re.compile(r"\b(senior|staff|principal|lead|director|head of|manager|sr\.?)\b", re.I)
+        if early_career:
+            for j in db.scalars(select(DiscoveredJob).where(DiscoveredJob.match_score.is_(None))):
+                if senior_title.search(j.role):
+                    j.match_score = 10
+                    j.match_reason = "Senior-level title; you're targeting intern / new-grad roles."
+            db.commit()
 
         # Score new jobs plus any recent ones a previous run failed to score.
         # Batches of 15 keep prompts small; commit per batch so results appear as they land.

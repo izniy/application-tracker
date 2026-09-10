@@ -118,6 +118,7 @@ class ProfileUpdate(BaseModel):
     headline: str | None = None
     location: str | None = None
     target_roles: list[str] | None = None
+    target_levels: list[str] | None = None
     target_locations: list[str] | None = None
     skills: list[str] | None = None
     seniority: str | None = None
@@ -131,6 +132,7 @@ class ProfileOut(ORM):
     headline: str | None
     location: str | None
     target_roles: list[str] | None
+    target_levels: list[str] | None
     target_locations: list[str] | None
     skills: list[str] | None
     seniority: str | None

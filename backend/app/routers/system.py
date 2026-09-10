@@ -37,7 +37,8 @@ def dashboard(db: Session = Depends(get_db)):
         due_soon=list(db.scalars(select(Application).where(Application.next_action_at.is_not(None), Application.status.in_(ACTIVE))
                                  .order_by(Application.next_action_at).limit(5))),
         recent_alerts=list(db.scalars(select(Alert).where(Alert.dismissed.is_(False)).order_by(Alert.created_at.desc()).limit(6))),
-        top_matches=list(db.scalars(select(DiscoveredJob).where(DiscoveredJob.verdict.is_(None), DiscoveredJob.found_at >= datetime.utcnow() - timedelta(days=7))
+        top_matches=list(db.scalars(select(DiscoveredJob).where(DiscoveredJob.verdict.is_(None), DiscoveredJob.match_score >= 60,
+                                                                DiscoveredJob.found_at >= datetime.utcnow() - timedelta(days=7))
                                     .order_by(DiscoveredJob.match_score.desc()).limit(5))),
         last_runs={k: _last_run(db, k) for k in JOBS},
         email_connected=gmail.is_connected(db),

@@ -3,9 +3,13 @@ from ..models import Application, DiscoveredJob, Profile
 from . import llm
 
 SYSTEM = """You are a job-fit scorer for a specific candidate. Score realistically: a 90 means
-they should apply today; below 50 means not worth their time. Penalise seniority mismatch and
-locations outside their target list heavily. If past verdicts are given, treat them as taste:
-score jobs like ones they saved higher and jobs like ones they dismissed lower."""
+they should apply today; below 50 means not worth their time. Two hard rules:
+- A role above the candidate's target levels (e.g. a senior/staff/lead role for an intern or
+  new-grad candidate) scores at most 20, whatever else fits.
+- A role that cannot be done from any of their target locations (not in one of them, and not
+  remote-eligible from there) scores at most 30.
+If past verdicts are given, treat them as taste: score jobs like ones they saved higher and
+jobs like ones they dismissed lower."""
 
 
 def score_batch(profile: Profile, applied: list[Application], jobs: list[DiscoveredJob],
@@ -30,8 +34,10 @@ def score_batch(profile: Profile, applied: list[Application], jobs: list[Discove
 {profile.llm_summary or profile.headline or 'No profile yet.'}
 
 Target roles: {profile.target_roles}
-Target locations: {profile.target_locations}
-Seniority: {profile.seniority} | Availability: {profile.availability}
+Target levels (hard rule): {profile.target_levels or [profile.seniority or 'unspecified']}
+Target locations (hard rule): {profile.target_locations}
+Tech stack: {profile.skills}
+Availability: {profile.availability}
 
 Roles they have already applied to (signal of what they want):
 {applied_summary}

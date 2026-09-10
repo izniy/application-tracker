@@ -131,8 +131,9 @@ class Profile(Base):
     headline: Mapped[str | None] = mapped_column(String(300))
     location: Mapped[str | None] = mapped_column(String(200))
     target_roles: Mapped[list | None] = mapped_column(JSON)       # ["Software Engineer Intern", ...]
+    target_levels: Mapped[list | None] = mapped_column(JSON)      # ["Internship", "New Grad", ...]
     target_locations: Mapped[list | None] = mapped_column(JSON)   # ["Singapore", "Remote"]
-    skills: Mapped[list | None] = mapped_column(JSON)
+    skills: Mapped[list | None] = mapped_column(JSON)             # tech stack: languages, frameworks, infra
     seniority: Mapped[str | None] = mapped_column(String(50))     # intern | new_grad | mid | senior
     availability: Mapped[str | None] = mapped_column(String(200)) # "Feb–May 2027 internship; FT from Jun 2027"
     preferences: Mapped[str | None] = mapped_column(Text)         # free text: what excites you, dealbreakers
