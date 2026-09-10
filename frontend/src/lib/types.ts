@@ -57,7 +57,7 @@ export interface DiscoveredJob {
 
 export interface Profile {
   id: number; name: string | null; headline: string | null; location: string | null;
-  target_roles: string[] | null; target_locations: string[] | null; skills: string[] | null;
+  target_roles: string[] | null; target_levels: string[] | null; target_locations: string[] | null; skills: string[] | null;
   seniority: string | null; availability: string | null; preferences: string | null;
   resume_filename: string | null; resume_text: string | null; llm_summary: string | null; updated_at: string;
 }
