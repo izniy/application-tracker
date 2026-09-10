@@ -1,5 +1,5 @@
 import { ArrowRight, Mail, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import OrbitRings from "../components/OrbitRings";
 
@@ -21,13 +21,26 @@ function headline(d: D): string {
 export default function Dashboard() {
   const [d, setD] = useState<D | null>(null);
   const [running, setRunning] = useState<string | null>(null);
+  const alive = useRef(true);
   const load = () => api.dashboard().then(setD);
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    alive.current = true;
+    load();
+    return () => { alive.current = false; };
+  }, []);
 
+  // Poll until the triggered run actually finishes — scans can take minutes.
   const run = async (job: "email_scan" | "job_scan") => {
     setRunning(job);
+    const started = Date.now();
     await api.runJob(job);
-    setTimeout(() => { load(); setRunning(null); }, 8000);
+    while (alive.current && Date.now() - started < 30 * 60_000) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const latest = (await api.runs()).find((x) => x.job === job);
+      if (latest?.finished_at && new Date(latest.finished_at).getTime() >= started) break;
+      load(); // partial results (per-batch commits) show up as they land
+    }
+    if (alive.current) { load(); setRunning(null); }
   };
 
   if (!d) return <p className="text-dim">Loading…</p>;
