@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { Bookmark, ExternalLink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, fmtRel } from "../lib/api";
@@ -43,7 +44,7 @@ export default function Discover() {
             </div>
             {j.match_reason && <p className="text-sm text-dim">{j.match_reason}</p>}
             {expanded === j.id && j.description && (
-              <div className="text-sm text-dim max-h-64 overflow-y-auto border-t border-line pt-3" dangerouslySetInnerHTML={{ __html: j.description }} />
+              <div className="text-sm text-dim max-h-64 overflow-y-auto border-t border-line pt-3" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(j.description) }} />
             )}
             <div className="flex items-center gap-2 mt-auto text-xs text-dim">
               <span>{j.source} · {fmtRel(j.found_at)}</span>
