@@ -49,7 +49,7 @@ export default function Shell() {
         </nav>
         <p className="hidden md:block text-xs text-dim">Checks your inbox and job boards every morning.</p>
       </aside>
-      <main className="px-5 py-6 md:px-10 md:py-8 max-w-6xl w-full">
+      <main className="px-5 py-6 md:px-10 md:py-8 w-full min-w-0">
         <Outlet />
       </main>
     </div>
