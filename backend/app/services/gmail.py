@@ -1,5 +1,6 @@
 """Gmail OAuth + inbox reading. Tokens are stored in IntegrationState under key 'gmail_token'."""
 import base64
+import html
 import logging
 import time
 from datetime import datetime, timedelta
@@ -151,13 +152,14 @@ def _fetch(db: Session, service, query: str, max_results: int) -> list[dict]:
     for ref in resp.get("messages", []):
         msg = _execute(service.users().messages().get(userId="me", id=ref["id"], format="full"))
         headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
+        snippet = html.unescape(msg.get("snippet", ""))  # Gmail snippets are HTML-escaped
         out.append({
             "gmail_id": msg["id"],
             "thread_id": msg.get("threadId"),
             "sender": headers.get("from", ""),
             "subject": headers.get("subject", ""),
-            "snippet": msg.get("snippet", ""),
-            "body": _decode_body(msg["payload"]) or msg.get("snippet", ""),
+            "snippet": snippet,
+            "body": _decode_body(msg["payload"]) or snippet,
             "received_at": datetime.utcfromtimestamp(int(msg["internalDate"]) / 1000),
         })
     return out
