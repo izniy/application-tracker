@@ -89,12 +89,21 @@ def email_scan(db: Session) -> JobRunLog:
         except gmail.GmailAuthError:
             _gmail_reconnect_alert(db)
             raise
+        # Oldest first, and only the newest unseen message per thread gets classified —
+        # earlier messages in the same conversation are recorded but never alert.
+        messages.sort(key=lambda m: m["received_at"] or datetime.min)
+        newest_in_thread = {m["thread_id"] or m["gmail_id"]: m["gmail_id"] for m in messages}
         seen = 0
         created = 0
         for m in messages:
             if db.scalar(select(Email).where(Email.gmail_id == m["gmail_id"])):
                 continue
             seen += 1
+            if newest_in_thread[m["thread_id"] or m["gmail_id"]] != m["gmail_id"]:
+                db.add(Email(gmail_id=m["gmail_id"], thread_id=m["thread_id"], sender=m["sender"],
+                             subject=m["subject"], snippet=m["snippet"], received_at=m["received_at"],
+                             classification={"category": "superseded_in_thread"}))
+                continue
             text = f"{m['subject']} {m['snippet']} {m['sender']}"
             if not JOB_HINTS.search(text) and not _match_by_domain(db, m["sender"]):
                 db.add(Email(gmail_id=m["gmail_id"], thread_id=m["thread_id"], sender=m["sender"],
@@ -104,8 +113,11 @@ def email_scan(db: Session) -> JobRunLog:
 
             c = email_classifier.classify(m["sender"], m["subject"], m["body"], tracked)
             app = None
-            if c.get("application_id"):
-                app = db.get(Application, int(c["application_id"]))
+            try:
+                if c.get("application_id") is not None:
+                    app = db.get(Application, int(c["application_id"]))
+            except (TypeError, ValueError):
+                app = None
             app = app or _match_by_domain(db, m["sender"])
 
             email = Email(gmail_id=m["gmail_id"], thread_id=m["thread_id"], sender=m["sender"],
@@ -122,6 +134,13 @@ def email_scan(db: Session) -> JobRunLog:
             if app and (d := _domain(m["sender"])) and not any(d.endswith(x) for x in (app.company_domains or [])):
                 if not d.endswith(("gmail.com", "outlook.com", "yahoo.com")):
                     app.company_domains = [*(app.company_domains or []), d]
+
+            # A newer message in a thread supersedes any alert an older one raised.
+            if m["thread_id"]:
+                stale = db.scalars(select(Alert).join(Email, Alert.email_id == Email.id)
+                                   .where(Email.thread_id == m["thread_id"], Alert.dismissed.is_(False)))
+                for a in stale:
+                    a.dismissed = a.read = True
 
             kind = KIND_FOR_CATEGORY.get(cat, AlertKind.follow_up)
             if cat == "recruiter_outreach" and app:
@@ -178,22 +197,29 @@ def job_scan(db: Session) -> JobRunLog:
                     new_jobs.append(job)
             except Exception:  # noqa: BLE001
                 log.exception("source %s failed", source.name)
-        db.flush()
+        db.commit()  # persist finds before scoring — a failed scoring pass loses nothing
 
-        # Score in batches of 15 to keep prompts small.
-        for i in range(0, len(new_jobs), 15):
-            batch = new_jobs[i:i + 15]
-            for jid, s in matcher.score_batch(profile, applied, batch).items():
+        # Score new jobs plus any recent ones a previous run failed to score.
+        # Batches of 15 keep prompts small; commit per batch so results appear as they land.
+        verdicts = list(db.scalars(select(DiscoveredJob).where(DiscoveredJob.verdict.is_not(None))
+                                   .order_by(DiscoveredJob.found_at.desc()).limit(20)))
+        unscored = list(db.scalars(select(DiscoveredJob).where(
+            DiscoveredJob.match_score.is_(None),
+            DiscoveredJob.found_at >= datetime.utcnow() - timedelta(days=7))))
+        for i in range(0, len(unscored), 15):
+            batch = unscored[i:i + 15]
+            for jid, s in matcher.score_batch(profile, applied, batch, verdicts).items():
                 job = db.get(DiscoveredJob, jid)
                 if job:
                     job.match_score, job.match_reason = s["score"], s["reason"]
+            db.commit()
 
-        strong = [j for j in new_jobs if (j.match_score or 0) >= 80]
+        strong = [j for j in unscored if (j.match_score or 0) >= 80]
         for j in strong[:5]:
             db.add(Alert(kind=AlertKind.discovery, title=f"Strong match: {j.role} at {j.company}",
                          body=j.match_reason, urgency=2))
         db.commit()
-        return f"{len(new_jobs)} new jobs from {len(active_sources())} sources, {len(strong)} strong matches"
+        return f"{len(new_jobs)} new jobs from {len(active_sources())} sources, {len(unscored)} scored, {len(strong)} strong matches"
 
     return _run(db, "job_scan", work)
 
