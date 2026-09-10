@@ -4,14 +4,18 @@ from . import llm
 
 SYSTEM = """You are a job-fit scorer for a specific candidate. Score realistically: a 90 means
 they should apply today; below 50 means not worth their time. Penalise seniority mismatch and
-locations outside their target list heavily."""
+locations outside their target list heavily. If past verdicts are given, treat them as taste:
+score jobs like ones they saved higher and jobs like ones they dismissed lower."""
 
 
-def score_batch(profile: Profile, applied: list[Application], jobs: list[DiscoveredJob]) -> dict[int, dict]:
+def score_batch(profile: Profile, applied: list[Application], jobs: list[DiscoveredJob],
+                verdicts: list[DiscoveredJob] | None = None) -> dict[int, dict]:
     """Returns {job.id: {score, reason}}. Batched to keep LLM calls low."""
     if not jobs:
         return {}
     applied_summary = [f"{a.role} @ {a.company} ({a.location or 'n/a'})" for a in applied[:25]]
+    verdict_summary = [f"{v.verdict}: {v.role} @ {v.company} ({v.location or 'n/a'}, scored {v.match_score or '?'})"
+                       for v in verdicts or []]
     listing = [
         {
             "id": j.id,
@@ -31,6 +35,9 @@ Seniority: {profile.seniority} | Availability: {profile.availability}
 
 Roles they have already applied to (signal of what they want):
 {applied_summary}
+
+Their verdicts on jobs Orbit found earlier (saved = interested, dismissed = not interested):
+{verdict_summary or 'none yet'}
 
 Jobs to score:
 {listing}
